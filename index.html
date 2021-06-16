@@ -1,0 +1,254 @@
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Console</title>
+
+    <!-- Bootstrap 5 -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x"
+      crossorigin="anonymous"
+    />
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4"
+      crossorigin="anonymous"
+    ></script>
+
+    <!-- Font Awesome 5 -->
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css"
+      rel="stylesheet"
+    />
+
+    <!-- load pug template compiler as window.pug -->
+    <script src="https://pugjs.org/js/pug.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dedent@0.7.0/dist/dedent.min.js"></script>
+    <script>
+      window.pug = require('pug')
+    </script>
+
+    <!-- load lodash function programming library as window._ -->
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.20/lodash.min.js"
+      integrity="sha512-90vH1Z83AJY9DmlWa8WkjkV79yfS2n2Oxhsi2dZbIv0nC4E6m5AbH8Nh156kkM7JePmqD6tcZsfad1ueoaovww=="
+      crossorigin="anonymous"
+    ></script>
+
+    <!-- load Vue 2 as window.Vue -->
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+    <!-- Monaco editor loader (requires initialization code) -->
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/monaco-editor@latest/min/vs/loader.js"
+    ></script>
+    <script>
+      // Asynchronously loads window.monaco.editor
+      function asyncLoadMonacoEditorModule () {
+        return new Promise((resolve, reject) => {
+          window.require.config({
+            paths: { vs: 'https://unpkg.com/monaco-editor@latest/min/vs' }
+          })
+          window.MonacoEnvironment = {
+            getWorkerUrl: function (workerId, label) {
+              return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+                  self.MonacoEnvironment = {
+                    baseUrl: 'https://unpkg.com/monaco-editor@latest/min/'
+                  };
+                  importScripts('https://unpkg.com/monaco-editor@latest/min/vs/base/worker/workerMain.js');`)}`
+            }
+          }
+          window.require(['vs/editor/editor.main'], () => resolve())
+        })
+      }
+    </script>
+  </head>
+
+  <body>
+    <div id="vue-app"></div>
+  </body>
+
+  <script>
+    // Useful async version of setTimeout
+    function sleep (ms) {
+      return new Promise(resolve => setTimeout(resolve, ms))
+    }
+
+    function makeId() {
+      return Math.random()
+        .toString(36)
+        .slice(-6)
+    }
+
+    // loads the remote rpc proxy to windows.remote, where
+    //   response = await remote.functionOnServer(arg0, arg1)
+    // where response:
+    //   1. { result: ... }
+    //   2. { error: { code: <int>, message: str } }
+    const remoteUrl = `./rpc-run`
+
+    async function rpc (method, ...params) {
+      const id = makeId()
+      console.log(`rpc-run.remote.${method}:`, params)
+      try {
+        const payload = { method, params, jsonrpc: '2.0', id }
+        const response = await fetch(remoteUrl, {
+          method: 'post',
+          mode: 'cors',
+          cache: 'no-cache',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        return await response.json()
+      } catch (e) {
+        console.log(`rpc-run.remote.${method} [fail]: ${e}`)
+        return { error: { message: `${e}`, code: -32000 }, jsonrpc: '2.0', id }
+      }
+    }
+
+    class RpcClass {
+      constructor () {
+        return new Proxy(this, {
+          get (target, prop) {
+            return async function () {
+              return await rpc(prop, ...arguments)
+            }
+          }
+        })
+      }
+    }
+
+    const remote = new RpcClass()
+
+    // language="pug"
+    const pugTemplate = `
+      .d-flex.flex-column.h-100.p-3
+
+        // navigation bar
+        nav.navbar.navbar-light
+          h3 ACONS: Async Web Console
+
+        // command line input
+        .mt-2
+          .input-group.input-group-sm
+            .input-group-prepend
+              span.input-group-text Type Command
+            input.form-control(type='text' v-model='command' v-on:keyup.enter='runCommand')
+            button.btn.btn-primary(v-on:click='runCommand') Run
+        .list-group(v-if="history.length")
+            .list-group-item.px-2.py-1(v-for="jobId in history" v-on:click="selectJob(jobId)") {{ jobCache[jobId].script }}
+
+        // console log display of commands
+        h5.mt-4 Live Output
+        .border
+          .d-flex.flex-row.justify-content-between
+            .d-flex.flex-row.align-items-center.px-2.py-1
+              .spinner-border.spinner-border-sm(v-if='job.isRunning')
+              .badge.bg-info.me-1(v-if="!job.isRunning && job.status") {{  job.status }}
+              pre.ms-2.m-0 {{ job.script }}
+            button.btn.btn-primary(v-on:click="killJob") kill
+        .mt-2.card.px-2
+          pre.m-0
+            .small(v-for="line of job.outputLines") {{ line }}
+
+        // editable dispaly of output
+        h5.mt-4 Editable Output
+        .border.py-2
+          #editor(style='height: 400px')
+    `
+
+    function init () {
+      new Vue({
+        el: '#vue-app',
+
+        template: pug.render(dedent(pugTemplate)),
+
+        data () {
+          return {
+            command: '',
+            job: {},
+            jobCache: {},
+            history: []
+          }
+        },
+
+        async mounted () {
+          setInterval(this.updateJobOutput, 500)
+          await asyncLoadMonacoEditorModule()
+          this.editor = window.monaco.editor.create(
+            document.getElementById('editor'),
+            {
+              value: '',
+              language: 'bash',
+              automaticLayout: true
+            }
+          )
+        },
+
+        methods: {
+          async updateJobOutput () {
+            if (_.get(this, 'job.isRunning')) {
+              let jobId = this.job.id
+              let job = this.jobCache[jobId]
+              let response = await remote.flush_console_lines(jobId)
+              let newLines = response.result
+              for (let l of newLines) {
+                let trimL = _.trimEnd(l)
+                if (trimL.length) {
+                  job.outputLines.push(trimL + '\n')
+                }
+              }
+              job.outputLines = _.takeRight(job.outputLines, 10)
+              this.$forceUpdate()
+            }
+          },
+
+          async killJob () {
+            await remote.kill_job(this.job.id)
+          },
+
+          selectJob(jobId) {
+            if (jobId in this.jobCache) {
+              this.job = this.jobCache[jobId]
+              this.editor.setValue(this.job.output)
+            }
+          },
+
+          async runCommand () {
+            let cmd = this.command
+            console.log(`runCommand '${cmd}'`)
+
+            let jobId = makeId()
+            let job = {
+                script: cmd,
+                id: jobId,
+                isRunning: true,
+                outputLines: [],
+                output: '',
+                status: 'Running'
+            }
+            this.jobCache[jobId] = job
+            this.job = job
+            this.history.unshift(jobId)
+            this.editor.setValue('')
+            this.$forceUpdate()
+
+            let response = await remote.os_run(cmd, null, false, jobId)
+            if (response.result) {
+              job.status = `Exit-code:${response.result.exitCode}`
+              job.output = response.result.output
+              this.editor.setValue(this.job.output)
+            }
+
+            this.updateJobOutput()
+            job.isRunning = false
+          }
+        }
+      })
+    }
+
+    document.addEventListener('DOMContentLoaded', init)
+
+  </script>
+</html>
