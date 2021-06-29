@@ -10,7 +10,7 @@ def read(*rnames):
 
 setup(
     name="acons",
-    version="0.1",
+    version="0.1.1",
     author="Bosco Ho",
     author_email="apposite@gmail.com",
     url="https://github.com/boscoh/acons",

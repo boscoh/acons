@@ -8,7 +8,6 @@ from pathlib import Path
 from urllib.request import urlopen
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import FileResponse
 
 import acons as handlers
@@ -16,11 +15,9 @@ import acons as handlers
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
-app = FastAPI()
+index = Path(__file__).resolve().parent / "index.html"
 
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+app = FastAPI()
 
 
 @app.post("/rpc-run")
@@ -45,9 +42,6 @@ async def rpc_run(data: dict):
             "jsonrpc": "2.0",
             "id": job_id,
         }
-
-
-index = Path(__file__).resolve().parent / "index.html"
 
 
 @app.get("/")
@@ -77,4 +71,4 @@ def open_url_when_ready(url, sleep_in_s=1):
     threading.Thread(target=inner).start()
 
 
-open_url_when_ready("http://127.0.0.1:5200")
+open_url_when_ready("http://0.0.0.0:5200")

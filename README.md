@@ -11,50 +11,50 @@ Sometimes, you want to run command-line utilities and expose the output to a web
 
     pip install acons
 
-### os_run
+### run
 
 Function interface:
 
-    os_run(command, run_dir=None, is_parse=False, job_id=None)
+    run(command, run_dir=None, is_parse=False, job_id=None)
 
  - `command`: str of command-line command
  - `run_dir`: optional starting directory of the command
  - `is_parse`: optional flag to parse the output as tsv file into a list
              of dictionaries
- - `job_id`: optional id that will be used to `flush_console_output` and `kill_job`
+ - `job_id`: optional id that will be used to `flush_lines` and `kill_job`
 
 To use in an async function:
 
-    await acons.os_run('ls', job_id='my-special-id-123')
+    await acons.run('ls', job_id='my-special-id-123')
 
 To test the output in a sync version:
 
     import acons
-    output = acons.get_output('ls')
+    output = acons.sync_run('ls')
     
-### flush_console_lines
+### flush_lines
 
 In an async function:
     
-    `lines = await acons.flush_console_lines('my-special-id-123')`
+    lines = await acons.flush_lines('my-special-id-123')
 
-This will return the console lines produced by the job since the last call to `acons.flush_console_lines`
+This will return the console lines produced by the job since the last call to `acons.flush_lines`
 
 ### kill_job
 
 In an async function:
 
-    `await kill_job('my-special-id-123')`
+    `await kill_job('my-special-id-123')
 
 Sends the kill signal for the job.
 
-### Parameters
+### Parameters d
 
-`acons.run_interval_in_s = 0.2` - determines how long the function poll for each interval
+`acons.RUN_INTERVAL_IN_S = 0.2` - determines how long the function polls for each interval
 
-`acons.sleep_interval_in_s = 0.5` - determines how long the function sleeps between each interval
+`acons.SLEEP_INTERVAL_IN_S = 0.5` - determines how long the function sleeps between intervals
 
-`acons.n_max_job = 100` - maximum number of jobs that stores output using an LRU cache
+`acons.N_MAX_JOB = 100` - maximum number of jobs that stores output using an LRU cache
 
 ## Example server
 
@@ -66,7 +66,7 @@ When the job is completed, the entire console output is made available through t
 
 Download the .zip version of this package, then run the server:
 
-    ./run.sh
+    ./test-server.sh
 
 which is essentially:
 

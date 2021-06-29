@@ -14,17 +14,29 @@ Asynchronous command-line process management
 
 logger = logging.getLogger(__name__)
 
-run_interval_in_s = 0.2
-sleep_interval_in_s = 0.5
-n_max_job = 100
+RUN_INTERVAL_IN_S = 0.2
+SLEEP_INTERVAL_IN_S = 0.5
+N_MAX_JOB = 100
 
-output_lines_by_job_id = pylru.lrucache(n_max_job)
-terminate_by_job_id = pylru.lrucache(n_max_job)
+output_lines_by_job_id = pylru.lrucache(N_MAX_JOB)
+terminate_by_job_id = pylru.lrucache(N_MAX_JOB)
 
 lock = asyncio.Lock()
 
 
-async def flush_console_lines(job_id):
+async def add_line(job_id, line):
+    async with lock:
+        if job_id not in output_lines_by_job_id:
+            output_lines_by_job_id[job_id] = []
+        output_lines_by_job_id[job_id].append(line)
+
+
+async def clear_lines(job_id):
+    async with lock:
+        output_lines_by_job_id[job_id] = []
+
+
+async def flush_lines(job_id):
     """
     Pops off the latest output lines associated with job_id
     """
@@ -86,7 +98,7 @@ def set_non_blocking(fd):
     fcntl.fcntl(fd, fcntl.F_SETFL, flags)
 
 
-async def os_run(command, run_dir=None, is_parse=False, job_id=None):
+async def run(command, run_dir=None, is_parse=False, job_id=None):
     """
     Runs a system command and saves the console output in
     a globally accessible cache that is accessible
@@ -98,7 +110,11 @@ async def os_run(command, run_dir=None, is_parse=False, job_id=None):
     :type arg: bool
     :param job_id: id to allow async fetching of console and async termination
 
-    :returns: { "exitCode": int, "output": <str|list<str>> }
+    :returns: {
+        "exitCode": int,
+        "output": str,
+        "table": [{},..] // optional
+    }
     """
     logger.info(f"os_run '{command}' in '{run_dir}' with id='{job_id}'")
 
@@ -152,23 +168,21 @@ async def os_run(command, run_dir=None, is_parse=False, job_id=None):
             break
 
         # allow other tasks to run
-        if time.time() - tick > run_interval_in_s:
+        if time.time() - tick > RUN_INTERVAL_IN_S:
             await push_lines_to_output_cache()
-            await asyncio.sleep(sleep_interval_in_s)
+            await asyncio.sleep(SLEEP_INTERVAL_IN_S)
             tick = time.time()
 
     await push_lines_to_output_cache()
 
     exec_code = process.returncode
-    if exec_code == 0:
-        output = str(output)
-        if is_parse:
-            output = parse_output_table(output)
-        return {"exitCode": exec_code, "output": output}
-    else:
-        return {"exitCode": exec_code, "output": output}
+    output = str(output)
+    result = {"exitCode": exec_code, "output": output}
+    if is_parse and exec_code == 0:
+        result['table'] = parse_output_table(output)
+
+    return result
 
 
-def get_output(command, run_dir=None, is_parse=False):
-    """Synchronous version of os_run"""
-    return asyncio.run(os_run(command, run_dir, is_parse))
+def sync_run(command, run_dir=None, is_parse=False):
+    return asyncio.run(run(command, run_dir, is_parse))

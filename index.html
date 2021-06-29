@@ -191,7 +191,7 @@
             if (_.get(this, 'job.isRunning')) {
               let jobId = this.job.id
               let job = this.jobCache[jobId]
-              let response = await remote.flush_console_lines(jobId)
+              let response = await remote.flush_lines(jobId)
               let newLines = response.result
               for (let l of newLines) {
                 let trimL = _.trimEnd(l)
@@ -234,7 +234,7 @@
             this.editor.setValue('')
             this.$forceUpdate()
 
-            let response = await remote.os_run(cmd, null, false, jobId)
+            let response = await remote.run(cmd, null, false, jobId)
             if (response.result) {
               job.status = `Exit-code:${response.result.exitCode}`
               job.output = response.result.output
